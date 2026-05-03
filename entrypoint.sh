@@ -12,9 +12,8 @@ fi
 # 如果配置文件不存在，且提供了 PHONE + PASSWORD，自动密码登录
 if [ ! -f "$CONFIG_FILE" ] && [ -n "$PHONE" ] && [ -n "$PASSWORD" ]; then
     echo "[entrypoint] Auto login with password mode..."
-    # y=确认免责声明, 2=密码登录, 然后输入手机号、用户名、密码
-    # 如果有多台云电脑，默认选第 CONNECT_INDEX 台（默认0）
-    printf "y\n2\n${PHONE}\n${USERNAME}\n${PASSWORD}\n${CONNECT_INDEX:-0}\n" | /app/cloudpc login || true
+    # y=确认免责声明, 2=密码登录, 用户名, 密码
+    printf "y\n2\n${USERNAME}\n${PASSWORD}\n${CONNECT_INDEX:-0}\n" | /app/cloudpc login || true
     sleep 2
 fi
 
