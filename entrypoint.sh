@@ -9,12 +9,18 @@ if [ -n "$CONFIG_JSON" ]; then
     echo "[entrypoint] Config restored from CONFIG_JSON env var"
 fi
 
-# 如果配置文件不存在，且提供了 PHONE + PASSWORD，自动密码登录
-if [ ! -f "$CONFIG_FILE" ] && [ -n "$PHONE" ] && [ -n "$PASSWORD" ]; then
-    echo "[entrypoint] Auto login with password mode..."
-    # y=确认免责声明, 2=密码登录, 用户名, 密码
-    printf "y\n2\n${USERNAME}\n${PASSWORD}\n${CONNECT_INDEX:-0}\n" | /app/cloudpc login || true
-    sleep 2
+# 自动密码登录函数
+auto_login() {
+    if [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
+        echo "[entrypoint] Auto login with password mode..."
+        printf "y\n2\n${USERNAME}\n${PASSWORD}\n${CONNECT_INDEX:-0}\n" | /app/cloudpc login || true
+        sleep 3
+    fi
+}
+
+# 如果配置文件不存在，尝试自动登录
+if [ ! -f "$CONFIG_FILE" ]; then
+    auto_login
 fi
 
 # 如果提供了 LOGIN 模式，进入交互式登录
@@ -26,11 +32,27 @@ fi
 # 检查配置文件是否存在
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "[entrypoint] Login failed or no config found."
-    echo "[entrypoint] Set MODE=login for interactive login via shell."
     sleep 3600
     exit 1
 fi
 
-echo "[entrypoint] Config found, starting keepalive (forever mode)..."
-echo "[entrypoint] $(cat $CONFIG_FILE)"
-exec /app/cloudpc keepalive --forever
+# 带重试的保活循环：失败时重新登录再试
+MAX_RETRIES=3
+for i in $(seq 1 $MAX_RETRIES); do
+    echo "[entrypoint] Attempt $i/$MAX_RETRIES - starting keepalive..."
+
+    # 先重新登录刷新 token
+    if [ $i -gt 1 ]; then
+        echo "[entrypoint] Re-login to refresh token..."
+        auto_login
+        sleep 3
+    fi
+
+    /app/cloudpc keepalive --forever && break
+
+    echo "[entrypoint] Keepalive exited, retrying in 10s..."
+    sleep 10
+done
+
+echo "[entrypoint] All retries exhausted."
+sleep 60
